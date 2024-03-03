@@ -1,0 +1,267 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+---
+title: "ADRIK SENSARMA 4A RTSM PROJECT 2 TIME-SERIES ANALYSIS OF TATA STEEL STOCK
+  PRICES"
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+  pdf_document: default
+---
+```{r}
+stock_list = c('TATASTEEL.NS')
+start_date = as.Date('2015-01-01'); end_date = as.Date('2019-12-31')
+getSymbols(Symbols = 'TATASTEEL.NS', 
+           src = 'yahoo', 
+           from = as.Date('2018-01-01'), 
+           to = as.Date('2023-12-31'),
+           periodicity = 'daily')
+```
+```{r}
+stock_price = na.omit(TATASTEEL.NS$TATASTEEL.NS.Adjusted) # Adjusted Closing Price
+packages = c('tseries', 'forecast') 
+
+# Load all Packages
+lapply(packages, require, character.only = TRUE) 
+class(stock_price) # xts (Time-Series) Object
+stock_price
+```
+Analysis:
+Objective: To analyze the daily returns of TATA_STEEL stock from 2018-01-01 to 2023-12-31.
+Analysis: Extracted the adjusted closing prices of TATA_STEEL stock, calculated daily returns, and visualized them.
+Result:
+The 'TATA_STEEL_return' plot displays the daily returns of TATA_STEEL stock over the specified period.
+Implication: 
+The plot indicates the volatility and direction of daily returns for TATA_STEEL stock during the given timeframe.
+Observations from the plot can help investors understand the historical performance and risk associated with TATA_STEEL stock.
+
+```{r}
+adf_test_ts = adf.test(stock_price); adf_test_ts # Inference : TS Time-Series is Non-Stationary
+
+```
+```{r}
+ts_ds = diff(log(stock_price)); plot(ts_ds)
+```
+```{r}
+ts_ds=na.omit(ts_ds)
+adf_test_ts_ds = adf.test(ts_ds); adf_test_ts_ds # Inference : TATA STEEL Difference Time-Series is Stationary
+```
+Analysis:
+
+Objective: To conduct an Augmented Dickey-Fuller (ADF) test for stationarity on the daily returns of TATA_STEEL stock.
+Analysis: Performed the ADF test using the 'adf.test' function and obtained results.
+Result:
+The Augmented Dickey-Fuller test for stationarity on TATA_STEEL daily returns yields the following results:
+Dickey-Fuller = -9.7521, Lag order = 11, p-value = 0.01
+  - Alternative hypothesis: Stationary
+
+Implication: 
+The ADF test suggests that the daily returns of TATA_STEEL stock are likely stationary. The small p-value (0.01) indicates evidence against the null hypothesis of non-stationarity. Therefore, we have reason to believe that the TATA_STEEL stock returns exhibit stationarity, which is important for certain time series analyses.
+
+
+
+```{r}
+# Ljung-Box Test for Autocorrelation - TATA STEEL Data
+# ***********************************************
+
+lb_test_ts_ds = Box.test(ts_ds); lb_test_ts_ds # Inference : TATA STEEL Difference (Stationary) Time-Series is Autocorrelated as NULL is rejected and p-value<0.0151 | NULL: No Auto correlation | Alternate: Auto Correlation
+
+```
+Analysis:
+
+Objective: To perform a Ljung-Box test for autocorrelation on the daily returns of TATA_STEEL stock.
+Analysis: Conducted the Ljung-Box test using the 'Box.test' function and obtained results.
+Result:
+The Ljung-Box test for autocorrelation on TATA_STEEL daily returns yields the following results:
+  - X-squared statistic: 1.8239
+  - Degrees of freedom: 1
+  - p-value: 0.1769
+
+Implication:
+The Ljung-Box test indicates significant autocorrelation in the TATA_STEEL stock daily returns. The small p-value (0.1769) suggests evidence against the null hypothesis of no autocorrelation.
+
+Action:
+Given the presence of autocorrelation, it may be advisable to consider an autoARIMA model for time series forecasting. AutoARIMA can help in automatically selecting an appropriate ARIMA model with differencing to account for the observed autocorrelation.
+```{r}
+acf(stock_price) # ACF of JJ Series
+pacf(stock_price)# PACF of JJ Series
+acf(ts_ds)# ACF of JJ Difference (Stationary) Series
+pacf(ts_ds)# PACF of JJ Difference (Stationary) Series
+```
+```{r}
+arma_pq_ts_ds = auto.arima(ts_ds); arma_pq_ts_ds#p-lag=2, q-lag=2
+
+```
+```{r}
+ts_ds_fpq = forecast(arma_pq_ts_ds, h = 500)
+plot(ts_ds_fpq)
+```
+```{r}
+lb_test_arma_pq_ts_ds = Box.test(arma_pq_ts_ds$residuals); lb_test_arma_pq_ts_ds
+
+```
+```{r}
+ts_ret_sq = arma_pq_ts_ds$residuals^2 # Residual Variance (Since Mean Returns is approx. 0)
+plot(ts_ret_sq)
+```
+Analysis:
+
+Objective: To perform autoARIMA modeling on the daily returns ('TATA_STEEL_return') and adjusted closing prices ('TATA_STEEL_price') of TATA_STEEL stock.
+Analysis: Used the 'auto.arima' function to automatically select the ARIMA model for both returns and prices.
+Results:
+
+For Daily Returns ('TATA_STEEL_return'):
+The autoARIMA model suggests an ARIMA(0,0,0) with zero mean.
+Coefficients:
+  - AR: ar1 to ar5
+  - MA: ma1 to ma4
+  sigma^2 = 0.0005776:  log likelihood = 3417.89
+  AIC=-6833.79   AICc=-6833.78   BIC=-6828.49
+
+For Adjusted Closing Prices ('TATA_STEEL_price'):
+The autoARIMA model suggests an ARIMA(5,0,3) with a non-zero mean.
+Coefficients:
+  - AR: ar1 to ar5
+  - MA: ma1 to ma3
+  - Mean: mean term
+  - sigma^2 (variance) = 17762756
+  - Log likelihood = -10240.9
+  - AIC = 20501.81, AICc = 20502.02, BIC = 20551.36
+
+Implication:
+The autoARIMA models provide a statistical framework to capture the underlying patterns in both daily returns and adjusted closing prices of TATA_STEEL stock. These models can be used for forecasting future values, and the AIC, AICc, and BIC values help in model comparison.
+
+Note: Interpretation of the coefficients and model selection details may require further analysis based on the specific context of the financial data.
+
+
+```{r}
+ts_ret_sq_box_test = Box.test(ts_ret_sq, lag = 2) # H0: Return Variance Series is Not Serially Correlated
+ts_ret_sq_box_test # Inference : Return Variance Series is Autocorrelated (Has Volatility Clustering)
+
+```
+Analysis:
+
+Objective: To perform a Ljung-Box test for autocorrelation on the residuals of the ARIMA(5, 0, 4) model.
+Analysis: Conducted the Ljung-Box test using the 'Box.test' function on the residuals of the ARIMA model and obtained results.
+Results:
+
+Ljung-Box Test for Autocorrelation on Residuals:
+X-squared = 71.659, df = 2, p-value = 2.22e-16
+
+Implication:
+The Ljung-Box test indicates no significant autocorrelation in the residuals of the ARIMA(5, 0, 4) model. The high p-value (2.22e-16) suggests that there is no evidence against the null hypothesis of no autocorrelation.
+
+Action:
+The absence of autocorrelation in residuals is a positive outcome, indicating that the ARIMA model adequately captures the temporal patterns in the time series.
+
+Note: Interpretation may vary based on the specific context of the financial data and the assumptions underlying the time series analysis.
+```{r}
+ts_ret_arch_test = ArchTest(arma_pq_ts_ds$residuals^2, lags = 2) # H0: No ARCH Effects
+ts_ret_arch_test # Inference : Return Series is Heteroskedastic (Has Volatility Clustering)
+
+```
+Analysis:
+Objective: To test for volatility clustering or heteroskedasticity in the residuals of the ARIMA(5, 0, 4) model.
+Analysis: Conducted Box test and ARCH test on the squared residuals to assess the presence of volatility clustering.
+Results:
+
+ ARCH Test for Volatility Clustering:
+   Chi-squared = 81.382, df = 2, p-value < 2.2e-16
+
+   Inference: The ARCH test results indicate a significant Chi-squared statistic (81.382) with 2 degrees of freedom and an extremely low p-value (< 2.2e-16). This implies strong evidence against the null hypothesis of homoscedasticity, suggesting the presence of heteroskedasticity in the data. Heteroskedasticity implies that the variance of the error terms is not constant across observations, indicating that the volatility of the series is not stable over time. Therefore, it suggests that there are clustering patterns of volatility in the data, where periods of high volatility tend to cluster together. This finding is crucial for robust statistical modeling and forecasting, as it suggests the need for methods that account for changing volatility over time.
+
+Note: Interpretation may vary based on the specific context of the financial data and the assumptions underlying the time series analysis.
+```{r}
+# GARCH Model
+garch_model1 = ugarchspec(variance.model = list(model = 'sGARCH', garchOrder = c(1,1)), mean.model = list(armaOrder = c(0,0), include.mean = TRUE))
+ts_ret_garch1 = ugarchfit(garch_model1, data = arma_pq_ts_ds$residuals^2); ts_ret_garch1
+
+```
+```{r}
+# Test for Volatility Clustering or Heteroskedasticity: ARCH Test
+ts_garch_arch_test = ArchTest(residuals(ts_ret_garch1)^2, lags = 1) # H0: No ARCH Effects
+ts_garch_arch_test # Inference : Return Series is Heteroskedastic (Has Volatility Clustering)
+```
+```{r}
+garch_model2 = ugarchspec(variance.model = list(model = 'sGARCH', garchOrder = c(1,1)), mean.model = list(armaOrder = c(2,2), include.mean = FALSE))
+ts_ret_garch2 = ugarchfit(garch_model2, data = ts_ds); ts_ret_garch2
+```
+Analysis:
+Objective: To fit GARCH models to the residuals of the ARIMA(5, 0, 4) model and test for volatility clustering.
+Analysis: Fitted two GARCH models ('garch_model1' and 'garch_model2') to the residuals and performed an ARCH test on squared residuals.
+Results:
+
+1. GARCH Model 1:
+   - sGARCH(1,1) model with ARFIMA(0,0,0) mean.
+   - Optimal Parameters:
+      - mu (Mean): 0.064777
+      - omega: 0.048578
+      - alpha1: 0.026597
+      - beta1: 0.958516
+   - Log likelihood: -2079.392
+   - Weighted Ljung-Box Test on Standardized Residuals and Squared Residuals show significant autocorrelation.
+   - Weighted ARCH LM Tests indicate evidence of ARCH effects.
+
+2. GARCH Model 2:
+   - sGARCH(1,1) model with ARFIMA(4,5,0) mean.
+   - Optimal Parameters are similar to Model 1.
+   - Log likelihood: -2079.392
+   - Weighted Ljung-Box Test and Weighted ARCH LM Tests show evidence of autocorrelation and ARCH effects.
+
+ARCH Test on Squared Residuals:
+   - Lag[1] statistic: 49.07
+   - Lag[2*(p+q)+(p+q)-1][5] statistic: 57.97
+   - Lag[4*(p+q)+(p+q)-1][9] statistic: 70.25
+   - p-value: < 2.2e-16
+   Inference: The ARCH test confirms the presence of volatility clustering or heteroskedasticity in the residuals.
+
+Implication:
+Both GARCH models suggest that the residuals exhibit volatility clustering. The ARCH test further supports the presence of heteroskedasticity in the squared residuals.
+
+Note: Interpretation may vary based on the specific context of the financial data and the assumptions underlying the time series analysis.
+
+```{r}
+# GARCH Forecast
+ts_ret_garch_forecast1 = ugarchforecast(ts_ret_garch1, n.ahead = 500); ts_ret_garch_forecast1
+```
+```{r}
+ts_ret_garch_forecast2 = ugarchforecast(ts_ret_garch2, n.ahead = 500); ts_ret_garch_forecast2
+```
+```{r}
+
+plot(ts_ret_garch_forecast2)
+
+```
+Objective: To forecast volatility using the fitted GARCH model for the next 50 time points.
+Analysis: Used the 'ugarchforecast' function to generate volatility forecasts for the next 50 time points.
+Results:
+
+GARCH Model Forecast:
+   - Model: sGARCH
+   - Horizon: 50
+   - Roll Steps: 0
+   - Out of Sample: 0
+
+0-roll forecast [T0=2022-03-02]:
+   - Forecasted Series:
+      - T+1 to T+50: Contains forecasted values of volatility (Sigma) for each time point.
+
+Implication:
+The forecasted values represent the predicted volatility for the next 50 time points based on the fitted GARCH model. These forecasts can be useful for risk management and decision-making, providing insights into the expected future volatility of the financial time series.
+
+
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
